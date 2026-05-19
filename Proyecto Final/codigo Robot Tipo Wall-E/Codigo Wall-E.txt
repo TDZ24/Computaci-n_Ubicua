@@ -1,0 +1,229 @@
+#include <Servo.h>  // Librería para controlar el servomotor
+
+// ==================================================
+// PINES DEL SENSOR ULTRASÓNICO HC-SR04
+// El sensor mide la distancia usando ondas de sonido
+// ==================================================
+const int trigPin = 11;  // Pin que envía el pulso de sonido (Trigger)
+const int echoPin = 12;  // Pin que recibe el rebote del sonido (Echo)
+
+// ==================================================
+// PINES DEL MOTOR A — Rueda derecha
+// El L298N necesita 3 cables por motor:
+// enable = velocidad, in1/in2 = dirección
+// ==================================================
+const int enable1 = 5;   // Controla la velocidad del motor A (PWM)
+const int in1 = 6;       // Dirección motor A — cable 1
+const int in2 = 8;       // Dirección motor A — cable 2
+
+// ==================================================
+// PINES DEL MOTOR B — Rueda izquierda
+// ==================================================
+const int enable2 = 9;   // Controla la velocidad del motor B (PWM)
+const int in3 = 4;       // Dirección motor B — cable 1
+const int in4 = 3;       // Dirección motor B — cable 2
+
+// ==================================================
+// SERVO — Mueve el sensor para escanear los lados
+// ==================================================
+Servo miServo;           // Creamos el objeto servo
+const int pinServo = 7;  // Pin de señal del servomotor SG90
+
+// ==================================================
+// CONFIGURACIÓN GENERAL DEL ROBOT
+// Estos valores se pueden ajustar fácilmente
+// ==================================================
+int velocidad = 255;           // Velocidad al avanzar y retroceder (0=parado, 255=máximo)
+int velocidadGiro = 255;       // Velocidad al girar (255=máximo para giros más completos)
+int distanciaObstaculo = 35;   // Distancia en cm a la que detecta un obstáculo y frena
+
+// ==================================================
+// SETUP — Se ejecuta una sola vez al encender
+// Aquí se configuran todos los componentes
+// ==================================================
+void setup() {
+  Serial.begin(9600);      // Inicia la comunicación con el monitor serie del PC
+
+  miServo.attach(pinServo); // Conecta el servo al pin 7
+  miServo.write(95);        // Centra el servo al frente (90=centro, ajustar si está torcido)
+
+  // Configura el sensor ultrasónico
+  pinMode(trigPin, OUTPUT); // Trig es salida (envía señal)
+  pinMode(echoPin, INPUT);  // Echo es entrada (recibe señal)
+
+  // Configura los pines del motor A como salidas
+  pinMode(enable1, OUTPUT);
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+
+  // Configura los pines del motor B como salidas
+  pinMode(enable2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+
+  detener();    // Asegura que los motores estén apagados al inicio
+  delay(2000);  // Espera 2 segundos antes de arrancar (tiempo para alejarse)
+  Serial.println("=== WALL-E LISTO ==="); // Mensaje en el monitor serie
+}
+
+// ==================================================
+// MEDIR DISTANCIA
+// Mide 3 veces y devuelve el promedio
+// Así evita lecturas erróneas por interferencias
+// ==================================================
+long medirDistancia() {
+  long suma = 0;       // Aquí se suman las 3 lecturas
+  int lecturas = 3;    // Número de veces que mide
+
+  for (int i = 0; i < lecturas; i++) {
+    // Limpia el pin Trig antes de enviar el pulso
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+
+    // Envía un pulso de ultrasonido de 10 microsegundos
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+
+    // Mide cuánto tarda en regresar el sonido (máximo 25000 microsegundos = ~4 metros)
+    long duracion = pulseIn(echoPin, HIGH, 25000);
+
+    // Si no recibe respuesta (duracion=0) asume que no hay obstáculo (400 cm)
+    if (duracion == 0) suma += 400;
+    else suma += duracion * 0.034 / 2; // Convierte tiempo a distancia en cm
+
+    delay(30); // Pequeña pausa entre lecturas
+  }
+
+  return suma / lecturas; // Devuelve el promedio de las 3 lecturas
+}
+
+// ==================================================
+// AVANZAR
+// Ambos motores giran hacia adelante
+// in1=HIGH in2=LOW = rueda derecha adelante
+// in3=HIGH in4=LOW = rueda izquierda adelante
+// ==================================================
+void avanzar() {
+  analogWrite(enable1, velocidad);   // Activa velocidad motor A
+  analogWrite(enable2, velocidad);   // Activa velocidad motor B
+  digitalWrite(in1, HIGH); digitalWrite(in2, LOW);  // Motor A adelante
+  digitalWrite(in3, HIGH); digitalWrite(in4, LOW);  // Motor B adelante
+}
+
+// ==================================================
+// RETROCEDER
+// Ambos motores giran hacia atrás
+// in1=LOW in2=HIGH = rueda derecha atrás
+// in3=LOW in4=HIGH = rueda izquierda atrás
+// ==================================================
+void retroceder() {
+  analogWrite(enable1, velocidad);
+  analogWrite(enable2, velocidad);
+  digitalWrite(in1, LOW); digitalWrite(in2, HIGH);  // Motor A atrás
+  digitalWrite(in3, LOW); digitalWrite(in4, HIGH);  // Motor B atrás
+}
+
+// ==================================================
+// GIRAR DERECHA
+// Rueda derecha va atrás, rueda izquierda adelante
+// Esto hace que el robot gire sobre su propio eje
+// ==================================================
+void girarDerecha() {
+  analogWrite(enable1, velocidadGiro);
+  analogWrite(enable2, velocidadGiro);
+  digitalWrite(in1, HIGH); digitalWrite(in2, LOW);  // Motor A adelante
+  digitalWrite(in3, LOW);  digitalWrite(in4, HIGH); // Motor B atrás
+}
+
+// ==================================================
+// GIRAR IZQUIERDA
+// Rueda izquierda va atrás, rueda derecha adelante
+// ==================================================
+void girarIzquierda() {
+  analogWrite(enable1, velocidadGiro);
+  analogWrite(enable2, velocidadGiro);
+  digitalWrite(in1, LOW);  digitalWrite(in2, HIGH); // Motor A atrás
+  digitalWrite(in3, HIGH); digitalWrite(in4, LOW);  // Motor B adelante
+}
+
+// ==================================================
+// DETENER
+// Apaga los dos motores poniendo enable en 0
+// ==================================================
+void detener() {
+  analogWrite(enable1, 0);  // Apaga motor A
+  analogWrite(enable2, 0);  // Apaga motor B
+}
+
+// ==================================================
+// LOOP — Se repite continuamente mientras está encendido
+// Esta es la lógica principal del robot
+// ==================================================
+void loop() {
+  // Mide la distancia frontal con el sensor
+  long distanciaFrontal = medirDistancia();
+  Serial.print("Frontal: ");
+  Serial.print(distanciaFrontal);
+  Serial.println(" cm");
+
+  // ================================================
+  // Si el camino está despejado — avanza
+  // ================================================
+  if (distanciaFrontal > distanciaObstaculo) {
+    avanzar();
+
+  // ================================================
+  // Si hay obstáculo — ejecuta la rutina de evasión
+  // ================================================
+  } else {
+    Serial.println("Obstáculo detectado");
+    detener();
+    delay(300);  // Pausa antes de retroceder
+
+    // PASO 1 — Retrocede para ganar espacio y poder girar
+    retroceder();
+    delay(700);  // Tiempo de retroceso (subir = retrocede más lejos)
+    detener();
+    delay(300);  // Pausa antes de escanear
+
+    // PASO 2 — Gira el servo a la derecha y mide la distancia
+    miServo.write(30);   // 30° = mira a la derecha
+    delay(700);          // Espera a que el servo llegue a la posición
+    long derecha = medirDistancia();
+    Serial.print("Derecha: "); Serial.println(derecha);
+
+    // PASO 3 — Gira el servo a la izquierda y mide la distancia
+    miServo.write(150);  // 150° = mira a la izquierda
+    delay(700);          // Espera a que el servo llegue a la posición
+    long izquierda = medirDistancia();
+    Serial.print("Izquierda: "); Serial.println(izquierda);
+
+    // PASO 4 — Vuelve el servo al centro
+    miServo.write(90);   // 90° = centro (ajustar si el servo no queda recto)
+    delay(400);
+
+    // PASO 5 — Compara y escoge el lado más despejado
+    if (derecha >= izquierda) {
+      // Hay más espacio a la derecha — gira a la derecha
+      Serial.println("Girando derecha");
+      girarDerecha();
+      delay(900);  // Tiempo de giro (subir = gira más grados)
+    } else {
+      // Hay más espacio a la izquierda — gira a la izquierda
+      Serial.println("Girando izquierda");
+      girarIzquierda();
+      delay(900);  // Tiempo de giro (subir = gira más grados)
+    }
+    detener();
+    delay(300);
+
+    // PASO 6 — Avanza un poco para alejarse completamente del obstáculo
+    avanzar();
+    delay(400);  // Tiempo de avance extra (subir = se aleja más)
+    detener();
+    delay(200);
+  }
+
+  delay(30); // Pequeña pausa entre cada ciclo de medición
+}
